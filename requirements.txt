@@ -1,0 +1,5 @@
+influxdb-client
+lxml
+beautifulsoup4
+requests
+xmltodict
