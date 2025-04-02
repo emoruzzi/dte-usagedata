@@ -4,13 +4,37 @@ on:
   pull_request:
     branches: [ "main" ]
     types: [ opened, synchronize, reopened ]
-  push:
+  pull_request_target:
     branches: [ "main" ]
+    types: [ closed ]
 
 jobs:
-  build-main:
-    # Only run if the push to main is from a merged PR
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, 'Merge pull request')
+  build-pr:
+    # Run on PRs but don't publish
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          load: true
+
+  build-and-publish:
+    # Only run if the PR was merged
+    if: github.event_name == 'pull_request_target' && github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -19,6 +43,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+        with:
+          ref: main
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
