@@ -1,0 +1,27 @@
+version: '3'
+
+services:
+  dte-usagedata:
+    image: 0daft/dte-usagedata:latest
+    # Uncomment to build locally instead of pulling from Docker Hub
+    # build: .
+    container_name: dte-usagedata
+    restart: unless-stopped
+    environment:
+      - DTE_UUID=your-dte-uuid
+      - INFLUXDB_URL=http://influxdb:8086
+      - INFLUXDB_TOKEN=your-influxdb-token
+      - INFLUXDB_ORG=your-org
+      - INFLUXDB_BUCKET=your-bucket
+      - INFLUXDB_MEASUREMENT=dte
+
+      # Set INTERVAL in seconds (0 = run once, >0 = run repeatedly)
+      # Examples:
+      # - 43200  = 12 hours
+      # - 86400  = 24 hours (daily)
+      # - 604800 = 1 week
+      - INTERVAL=0
+    
+    # Uncomment to use a config file instead of environment variables
+    # volumes:
+    #  - ./custom-config.ini:/app/config.ini
