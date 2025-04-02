@@ -20,7 +20,8 @@ ENV INFLUXDB_TOKEN=""
 ENV INFLUXDB_ORG=""
 ENV INFLUXDB_BUCKET=""
 ENV INFLUXDB_MEASUREMENT="dte"
-ENV INTERVAL="0"  # Default to run once (0 = run once and exit)
+# Default to run once (0 = run once and exit)
+ENV INTERVAL="0"
 
 WORKDIR /app
 VOLUME [ "/app" ]
