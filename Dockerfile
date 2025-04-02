@@ -7,7 +7,7 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 
 
 COPY app.py /app/app.py
-COPY config.ini /app/config.ini.template
+COPY config.ini.template /app/config.ini.template
 
 
 COPY scripts/entrypoint.sh /app/entrypoint.sh
@@ -19,7 +19,8 @@ ENV INFLUXDB_URL=""
 ENV INFLUXDB_TOKEN=""
 ENV INFLUXDB_ORG=""
 ENV INFLUXDB_BUCKET=""
-ENV INFLUXDB_MEASUREMENT="dte"
+ENV INFLUX_ELECTRIC_MEASUREMENT="dte_electric"
+ENV INFLUX_GAS_MEASUREMENT="dte_gas"
 # Default to run once (0 = run once and exit)
 ENV INTERVAL="0"
 

@@ -2,7 +2,8 @@
 uuid = "1234ABCD-5678-EFGH-IJKL-90ABCDEF1234"
 
 [influx]
-measurement = "dte"
+electric_measurement = "dte_electric"
+gas_measurement = "dte_gas"
 bucket = "dte"
 org = "home"
 url = "http://127.0.0.1:8086/"

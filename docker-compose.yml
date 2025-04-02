@@ -13,7 +13,8 @@ services:
       - INFLUXDB_TOKEN=your-influxdb-token
       - INFLUXDB_ORG=your-org
       - INFLUXDB_BUCKET=your-bucket
-      - INFLUXDB_MEASUREMENT=dte
+      - INFLUX_ELECTRIC_MEASUREMENT=dte_electric
+      - INFLUX_GAS_MEASUREMENT=dte_gas
 
       # Set INTERVAL in seconds (0 = run once, >0 = run repeatedly)
       # Examples:

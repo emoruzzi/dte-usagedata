@@ -16,19 +16,24 @@ import influxdb_client
 from influxdb_client.client.write_api import SYNCHRONOUS
 import xmltodict
 from configparser import ConfigParser
+import argparse
+
+parser = argparse.ArgumentParser(description='Process DTE Energy usage data')
+parser.add_argument('--dry-run', action='store_true', help='Run without writing to InfluxDB')
+args = parser.parse_args()
 
 config = ConfigParser()
 config.read('config.ini')
 
-# Get config variables - prioritize environment variables over config.ini
 account = os.environ.get('DTE_UUID') or config.get('dte', 'uuid', fallback=None)
 if not account:
     raise ValueError("DTE_UUID environment variable or uuid in config.ini is required")
 
-# InfluxDB settings
-measurement = (os.environ.get('INFLUX_MEASUREMENT') or 
-               os.environ.get('INFLUXDB_MEASUREMENT') or 
-               config.get('influx', 'measurement', fallback='dte'))
+electric_measurement = (os.environ.get('INFLUX_ELECTRIC_MEASUREMENT') or
+                      config.get('influx', 'electric_measurement', fallback="dte_electric"))
+
+gas_measurement = (os.environ.get('INFLUX_GAS_MEASUREMENT') or
+                 config.get('influx', 'gas_measurement', fallback="dte_gas"))
 
 bucket = (os.environ.get('INFLUX_BUCKET') or 
           os.environ.get('INFLUXDB_BUCKET') or 
@@ -54,21 +59,22 @@ url = (os.environ.get('INFLUX_URL') or
 if not url:
     raise ValueError("INFLUX_URL/INFLUXDB_URL environment variable or url in config.ini is required")
 
-# Set user agent and DTE URL
 user_agent = {'User-agent': 'Mozilla/5.0'}
 DTE_URL = f"https://usagedata.dteenergy.com/link/{account}"
 
 
-# Connect to InfluxDB client and write API
-client = influxdb_client.InfluxDBClient(
-    url=url,
-    token=token,
-    org=org
-)
-write_api = client.write_api(write_options=SYNCHRONOUS)
+if not args.dry_run:
+    client = influxdb_client.InfluxDBClient(
+        url=url,
+        token=token,
+        org=org
+    )
+    write_api = client.write_api(write_options=SYNCHRONOUS)
+    print("Connected to InfluxDB")
+else:
+    print("DRY RUN MODE: No data will be written to InfluxDB")
 
 
-# Get data from DTE website and parse XML
 r = requests.get(DTE_URL, headers=user_agent)
 
 if r.status_code == 400:
@@ -83,24 +89,100 @@ if r.status_code == 400:
         raise ValueError(error_message)
 
 
-# Extract electric readings
-data = xmltodict.parse(r.content)
-for line in data['feed']['entry']:
-    if line["title"] == "Electric readings":
-        data = line
-        break;
+parsed_data = xmltodict.parse(r.content)
 
-if 'content' not in data or 'IntervalBlock' not in data['content']:
-    raise ValueError("Unable to parse response, is {dte_account} the correct ID?")
+meters = {}
+for entry in parsed_data['feed']['entry']:
+    if entry.get('content', {}).get('UsagePoint') and 'ServiceCategory' in entry['content']['UsagePoint']:
+        for link in entry.get('link', []):
+            if link.get('@rel') == 'self' and 'UsagePoint/' in link.get('@href', ''):
+                parts = link['@href'].split('/')
+                idx = parts.index('UsagePoint')
+                if idx + 1 < len(parts):
+                    meter_id = parts[idx + 1]
+                    kind = int(entry['content']['UsagePoint']['ServiceCategory']['kind'])
+                    # 0 = electricity, 1 = gas, etc.
+                    meter_type = 'electric' if kind == 0 else 'gas' if kind == 1 else f'unknown_{kind}'
+                    meters[meter_id] = {
+                        'type': meter_type,
+                        'title': entry.get('title')
+                    }
 
+print(f"Found {len(meters)} meters: {meters}")
 
-# Write data to InfluxDB
-for day in data['content']['IntervalBlock']:
-    for hour in day['IntervalReading']:
-        ts = hour['timePeriod']['start']
-        v = hour['value']
-        dt = datetime.datetime.fromtimestamp(int(ts)).strftime('%Y-%m-%d %H:%M:%S')
+readings_data = {}
+for entry in parsed_data['feed']['entry']:
+    if entry.get('title') and ('readings' in entry.get('title', '').lower()):
+        meter_id = None
+        for link in entry.get('link', []):
+            if link.get('@rel') == 'self' and 'UsagePoint/' in link.get('@href', ''):
+                parts = link['@href'].split('/')
+                idx = parts.index('UsagePoint')
+                if idx + 1 < len(parts):
+                    meter_id = parts[idx + 1]
+                    break
         
-        p = influxdb_client.Point(measurement).tag("account", account).field("watt", int(v)).time(dt)
-        print(dt + ": " + str(p))
-        write_api.write(bucket=bucket, record=p)
+        if meter_id and meter_id in meters:
+            readings_data[meter_id] = entry
+
+if not readings_data:
+    raise ValueError(f"Unable to parse response, is {account} the correct ID?")
+
+
+for meter_id, reading_entry in readings_data.items():
+    meter_info = meters[meter_id]
+    meter_type = meter_info['type']
+    
+    if meter_type == "electric":
+        measurement_name = electric_measurement
+    elif meter_type == "gas":
+        measurement_name = gas_measurement
+    else:
+        print(f"Warning: Skipping unsupported meter type: {meter_type}")
+        continue
+    
+    print(f"Processing {meter_type} meter {meter_id} using measurement '{measurement_name}'")
+    
+    field_name = "watt" if meter_type == "electric" else "ccf" if meter_type == "gas" else "value"
+    
+    if 'content' not in reading_entry or 'IntervalBlock' not in reading_entry['content']:
+        print(f"Warning: Couldn't find readings for meter {meter_id} ({meter_type})")
+        continue
+    
+    blocks = reading_entry['content']['IntervalBlock']
+    if not isinstance(blocks, list):
+        blocks = [blocks]
+    
+    for day in blocks:
+        if 'IntervalReading' not in day:
+            continue
+        
+        readings = day['IntervalReading']
+        if not isinstance(readings, list):
+            readings = [readings]
+        
+        for hour in readings:
+            ts = hour['timePeriod']['start']
+            v = hour['value']
+            dt = datetime.datetime.fromtimestamp(int(ts)).strftime('%Y-%m-%d %H:%M:%S')
+            
+            reading_quality = None
+            if 'ReadingQuality' in hour:
+                reading_quality = hour.get('ReadingQuality', {}).get('quality')
+                
+            p = (influxdb_client.Point(measurement_name)
+                .tag("account", account)
+                .tag("meter_type", meter_type)
+                .tag("meter_id", meter_id)
+                .field(field_name, int(v)))
+                
+            if reading_quality is not None:
+                p = p.field("quality", reading_quality)
+                
+            p = p.time(dt)
+            
+            quality_str = f" (quality: {reading_quality})" if reading_quality is not None else ""
+            print(f"{dt}: {meter_type} meter {meter_id} = {v} {field_name}{quality_str}")
+
+            if not args.dry_run:
+                write_api.write(bucket=bucket, record=p)
