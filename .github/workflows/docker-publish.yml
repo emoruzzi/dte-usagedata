@@ -9,29 +9,6 @@ on:
     types: [ closed ]
 
 jobs:
-  build-pr:
-    # Run on PRs but don't publish
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
-      - name: Build Docker image
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          push: false
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          load: true
-
   build-and-publish:
     # Only run if the PR was merged
     if: github.event_name == 'pull_request_target' && github.event.pull_request.merged == true

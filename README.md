@@ -1,6 +1,6 @@
 # DTE Energy Usage Monitor to InfluxDB
 
-[![Docker Build and Publish](https://github.com/0daft/dte-usagedata/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/0daft/dte-usagedata/actions/workflows/docker-publish.yml)
+[![Docker Build and Publish](https://github.com/emoruzzi/dte-usagedata/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/emoruzzi/dte-usagedata/actions/workflows/docker-publish.yml)
 
 Docker container that fetches DTE Energy usage data and stores it in InfluxDB for visualization.
 
@@ -25,6 +25,8 @@ docker run -e DTE_UUID=your-uuid-here \
   -e INFLUXDB_TOKEN=your-token \
   -e INFLUXDB_ORG=your-org \
   -e INFLUXDB_BUCKET=your-bucket \
+  -e INFLUX_ELECTRIC_MEASUREMENT=dte_electric \
+  -e INFLUX_GAS_MEASUREMENT=dte_gas \
   0daft/dte-usagedata:latest
 
 # Run on schedule (every 12 hours)
@@ -34,6 +36,8 @@ docker run -d --restart unless-stopped \
   -e INFLUXDB_TOKEN=your-token \
   -e INFLUXDB_ORG=your-org \
   -e INFLUXDB_BUCKET=your-bucket \
+  -e INFLUX_ELECTRIC_MEASUREMENT=dte_electric \
+  -e INFLUX_GAS_MEASUREMENT=dte_gas \
   -e INTERVAL=43200 \
   0daft/dte-usagedata:latest
 ```
@@ -57,7 +61,8 @@ A sample `docker-compose.yml` is included in the repository. To use it:
 - `INFLUXDB_TOKEN`: InfluxDB access token (**required**)
 - `INFLUXDB_ORG`: InfluxDB organization (**required**)
 - `INFLUXDB_BUCKET`: InfluxDB bucket (**required**)
-- `INFLUXDB_MEASUREMENT`: Measurement name (default: "dte")
+- `INFLUX_ELECTRIC_MEASUREMENT`: Electric usage measurement name (default: "dte_electric")
+- `INFLUX_GAS_MEASUREMENT`: Gas usage measurement name (default: "dte_gas")
 
 **Schedule Settings:**
 - `INTERVAL`: Time in seconds between runs (default: 0)
@@ -76,7 +81,8 @@ Alternatively, create a `config.ini` file:
 uuid = "your-dte-uuid"
 
 [influx]
-measurement = "dte"
+electric_measurement = "dte_electric"
+gas_measurement = "dte_gas"
 bucket = "your-bucket"
 org = "your-org"
 url = "http://influxdb:8086"
@@ -90,9 +96,16 @@ docker run -v /path/to/config.ini:/app/config.ini 0daft/dte-usagedata
 
 ## Data Structure
 
-- **Measurement**: "dte" (configurable)
-- **Tags**: `account=your-uuid`
+### Electric Meter
+- **Measurement**: "dte_electric" (configurable)
+- **Tags**: `account=your-uuid`, `meter_type=electric`, `meter_id=meter-id`
 - **Fields**: `watt=power_usage_value`
+- **Timestamp**: time of reading
+
+### Gas Meter
+- **Measurement**: "dte_gas" (configurable)
+- **Tags**: `account=your-uuid`, `meter_type=gas`, `meter_id=meter-id`
+- **Fields**: `ccf=gas_usage_value`
 - **Timestamp**: time of reading
 
 ## Troubleshooting
