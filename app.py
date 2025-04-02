@@ -20,13 +20,39 @@ from configparser import ConfigParser
 config = ConfigParser()
 config.read('config.ini')
 
-# Get config variables
-account = config.get('dte', 'uuid') if config.get('dte', 'uuid') else os.environ.get('DTE_UUID')
-measurement = config.get('influx', 'measurement') if config.get('influx', 'measurement') else os.environ.get('INFLUX_MEASUREMENT')
-bucket = config.get('influx', 'bucket') if config.get('influx', 'bucket') else os.environ.get('INFLUX_BUCKET')
-org = config.get('influx', 'org') if config.get('influx', 'org') else os.environ.get('INFLUX_ORG')
-token = config.get('influx', 'token') if config.get('influx', 'token') else os.environ.get('INFLUX_TOKEN')
-url = config.get('influx', 'url') if config.get('influx', 'url') else os.environ.get('INFLUX_URL')
+# Get config variables - prioritize environment variables over config.ini
+account = os.environ.get('DTE_UUID') or config.get('dte', 'uuid', fallback=None)
+if not account:
+    raise ValueError("DTE_UUID environment variable or uuid in config.ini is required")
+
+# InfluxDB settings
+measurement = (os.environ.get('INFLUX_MEASUREMENT') or 
+               os.environ.get('INFLUXDB_MEASUREMENT') or 
+               config.get('influx', 'measurement', fallback='dte'))
+
+bucket = (os.environ.get('INFLUX_BUCKET') or 
+          os.environ.get('INFLUXDB_BUCKET') or 
+          config.get('influx', 'bucket', fallback=None))
+if not bucket:
+    raise ValueError("INFLUX_BUCKET/INFLUXDB_BUCKET environment variable or bucket in config.ini is required")
+
+org = (os.environ.get('INFLUX_ORG') or 
+       os.environ.get('INFLUXDB_ORG') or 
+       config.get('influx', 'org', fallback=None))
+if not org:
+    raise ValueError("INFLUX_ORG/INFLUXDB_ORG environment variable or org in config.ini is required")
+
+token = (os.environ.get('INFLUX_TOKEN') or 
+         os.environ.get('INFLUXDB_TOKEN') or 
+         config.get('influx', 'token', fallback=None))
+if not token:
+    raise ValueError("INFLUX_TOKEN/INFLUXDB_TOKEN environment variable or token in config.ini is required")
+
+url = (os.environ.get('INFLUX_URL') or 
+       os.environ.get('INFLUXDB_URL') or 
+       config.get('influx', 'url', fallback=None))
+if not url:
+    raise ValueError("INFLUX_URL/INFLUXDB_URL environment variable or url in config.ini is required")
 
 # Set user agent and DTE URL
 user_agent = {'User-agent': 'Mozilla/5.0'}
@@ -75,6 +101,6 @@ for day in data['content']['IntervalBlock']:
         v = hour['value']
         dt = datetime.datetime.fromtimestamp(int(ts)).strftime('%Y-%m-%d %H:%M:%S')
         
-        p = influxdb_client.Point("dte").tag("account", account).field("watt", int(v)).time(dt)
+        p = influxdb_client.Point(measurement).tag("account", account).field("watt", int(v)).time(dt)
         print(dt + ": " + str(p))
         write_api.write(bucket=bucket, record=p)
