@@ -7,7 +7,7 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 
 
 COPY app.py /app/app.py
-COPY config.ini /app/config.ini.template
+COPY config.ini.template /app/config.ini.template
 
 
 COPY scripts/entrypoint.sh /app/entrypoint.sh
